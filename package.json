@@ -1,0 +1,23 @@
+{
+    "name": "book-data-analizer-api",
+    "version": "1.0.0",
+    "private": true,
+    "description": "API serverless para preguntar a OpenAI desde book-data-analizer",
+    "type": "module",
+    "engines": {
+      "node": ">=20"
+    },
+    "scripts": {
+      "dev": "vercel dev",
+      "start": "vercel dev",
+      "lint": "echo \"no lint\"",
+      "build": "echo \"serverless: sin build\""
+    },
+    "dependencies": {},
+    "devDependencies": {
+      "typescript": "^5.5.0",
+      "@types/node": "^20.12.0",
+      "vercel": "^39.0.0"
+    }
+  }
+  

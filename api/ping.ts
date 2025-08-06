@@ -1,24 +1,37 @@
-export const config = { runtime: "nodejs" }
+import type { VercelRequest, VercelResponse } from "@vercel/node"
 
-const ALLOWED = ["https://reikem.github.io", "http://localhost:5173"]
+const ALLOWED_ORIGINS = [
+  "https://reikem.github.io",     // GH Pages (tu frontend)
+  "http://localhost:5173",        // dev local
+]
 
-function cors(res: Response, reqOrigin?: string) {
-  const origin = reqOrigin && ALLOWED.includes(reqOrigin) ? reqOrigin : "*"
-  res.headers.set("Access-Control-Allow-Origin", origin)
-  res.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-  res.headers.set("Access-Control-Allow-Headers", "Content-Type")
-  return res
+function setCORS(res: VercelResponse, origin?: string) {
+  const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  res.setHeader("Access-Control-Allow-Origin", allow)
+  res.setHeader("Vary", "Origin")
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 }
 
-export default function handler(req: Request) {
-  if (req.method === "OPTIONS") return cors(new Response(null, { status: 204 }), req.headers.get("Origin"))
+export default function handler(req: VercelRequest, res: VercelResponse) {
+  try {
+    setCORS(res, req.headers.origin as string | undefined)
 
-  const hasKey = !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim())
-  const body = JSON.stringify({
-    ok: true,
-    openaiKey: hasKey,            // true/false, no expone la key
-    env: process.env.VERCEL_ENV || "unknown",
-    region: process.env.VERCEL_REGION || "unknown",
-  })
-  return cors(new Response(body, { status: 200, headers: { "Content-Type": "application/json" } }), req.headers.get("Origin"))
+    if (req.method === "OPTIONS") {
+      return res.status(204).end()
+    }
+    if (req.method !== "GET") {
+      return res.status(405).json({ error: "Method Not Allowed" })
+    }
+
+    const hasKey = !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim())
+    return res.status(200).json({
+      ok: true,
+      openaiKey: hasKey,                       // true/false (no expone la key)
+      env: process.env.VERCEL_ENV || "unknown",
+      region: process.env.VERCEL_REGION || "unknown",
+    })
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message ?? "Internal Error" })
+  }
 }
