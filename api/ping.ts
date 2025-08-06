@@ -1,17 +1,24 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+export const config = { runtime: "nodejs" }
 
-const ALLOWED_ORIGINS = ['https://reikem.github.io', 'http://localhost:5173']
+const ALLOWED = ["https://reikem.github.io", "http://localhost:5173"]
 
-function setCORS(req: VercelRequest, res: VercelResponse) {
-  const origin = req.headers.origin || ''
-  if (ALLOWED_ORIGINS.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Vary', 'Origin')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+function cors(res: Response, reqOrigin?: string) {
+  const origin = reqOrigin && ALLOWED.includes(reqOrigin) ? reqOrigin : "*"
+  res.headers.set("Access-Control-Allow-Origin", origin)
+  res.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+  res.headers.set("Access-Control-Allow-Headers", "Content-Type")
+  return res
 }
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  setCORS(req, res)
-  if (req.method === 'OPTIONS') return res.status(200).end()
-  return res.status(200).json({ ok: true })
+export default function handler(req: Request) {
+  if (req.method === "OPTIONS") return cors(new Response(null, { status: 204 }), req.headers.get("Origin"))
+
+  const hasKey = !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim())
+  const body = JSON.stringify({
+    ok: true,
+    openaiKey: hasKey,            // true/false, no expone la key
+    env: process.env.VERCEL_ENV || "unknown",
+    region: process.env.VERCEL_REGION || "unknown",
+  })
+  return cors(new Response(body, { status: 200, headers: { "Content-Type": "application/json" } }), req.headers.get("Origin"))
 }
