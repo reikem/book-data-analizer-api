@@ -1,7 +1,15 @@
-import { applyCORS } from "./_cors"
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { applyCors } from "./_cors";
 
-export default async function handler(req: any, res: any) {
-  if (applyCORS(req, res)) return
-  if (req.method !== "GET") return res.status(405).json({ error: "Method Not Allowed" })
-  res.status(200).json({ ok: true, env: !!process.env.OPENAI_API_KEY })
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  applyCors(req, res);
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  return res.status(200).json({ ok: true });
 }
