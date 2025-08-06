@@ -1,51 +1,42 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node"
+import { applyCORS } from "./_cors"
 
-const ALLOWED_ORIGINS = [
-  "https://reikem.github.io",
-  "http://localhost:5173",
-]
-
-function setCORS(res: VercelResponse, origin?: string) {
-  const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
-  res.setHeader("Access-Control-Allow-Origin", allow)
-  res.setHeader("Vary", "Origin")
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+type AskBody = {
+  question?: string
+  data?: any[]
+  companies?: string[]
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
+  if (applyCORS(req, res)) return
+  if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" })
+
+  const key = process.env.OPENAI_API_KEY
+  if (!key) return res.status(401).json({ error: "Missing OPENAI_API_KEY" })
+
   try {
-    setCORS(res, req.headers.origin as string | undefined)
+    const body: AskBody = typeof req.body === "string" ? JSON.parse(req.body) : req.body
+    const question = (body?.question || "").toString().slice(0, 2000)
 
-    if (req.method === "OPTIONS") {
-      return res.status(204).end()
-    }
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method Not Allowed" })
-    }
-
-    const key = (process.env.OPENAI_API_KEY || "").trim()
-    if (!key) {
-      return res.status(500).json({ error: "Missing OPENAI_API_KEY" })
-    }
-
-    const { question, data } = req.body || {}
-    const sample = Array.isArray(data) ? data.slice(0, 200) : []
+    // Envía sólo una muestra acotada
+    const sample = Array.isArray(body?.data) ? body!.data.slice(0, 120) : []
 
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${key}`,
+        "Authorization": `Bearer ${key}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        temperature: 0.4,
+        temperature: 0.3,
         messages: [
-          { role: "system", content: "Eres analista financiero y respondes en español, claro y conciso." },
+          { role: "system", content: "Eres analista financiero. Responde en español, breve y accionable." },
           {
             role: "user",
-            content: `Pregunta: ${question}\nMuestra (máx 200 filas): ${JSON.stringify(sample)}`,
+            content:
+              `Pregunta: ${question}\n` +
+              `Sociedades: ${Array.isArray(body?.companies) ? body!.companies.join(", ") : "todas"}\n` +
+              `Muestra de datos (truncado): ${JSON.stringify(sample)}`,
           },
         ],
       }),
@@ -53,14 +44,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const text = await r.text()
     if (!r.ok) {
-      // Propaga el código y detalle (útil para 401/invalid_api_key)
+      // Propaga errores útiles (401, 429, etc.) para que el front muestre un aviso
       return res.status(r.status).json({ error: text })
     }
-
-    const j = JSON.parse(text)
-    const answer = j?.choices?.[0]?.message?.content ?? "Sin respuesta."
-    return res.status(200).json({ answer })
+    const json = JSON.parse(text)
+    const answer = json?.choices?.[0]?.message?.content ?? "Sin respuesta."
+    res.status(200).json({ answer, via: "remote" })
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message ?? "Internal Error" })
+    res.status(500).json({ error: e?.message || "Error" })
   }
 }
