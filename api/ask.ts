@@ -1,78 +1,71 @@
-import { withCors } from "./_cors";
-export const config = { runtime: "edge" };
+import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-export default async function handler(req: Request) {
-  const origin = req.headers.get("origin");
+const ALLOWED_ORIGINS = [
+  'https://reikem.github.io',
+  'http://localhost:5173',
+]
 
-  // Preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: withCors(origin) });
+function setCORS(req: VercelRequest, res: VercelResponse) {
+  const origin = req.headers.origin || ''
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+  }
+  res.setHeader('Vary', 'Origin')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setCORS(req, res)
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end()
+  }
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' })
   }
 
-  // (Opcional) Tratar GET como ping para evitar 405 en consola
-  if (req.method === "GET") {
-    return new Response(JSON.stringify({ ok: true, hint: "Use POST for questions" }), {
-      status: 200,
-      headers: withCors(origin, { "Content-Type": "application/json" }),
-    });
-  }
-
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
-      status: 405,
-      headers: withCors(origin, { "Content-Type": "application/json" }),
-    });
-  }
-
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) {
-    return new Response(JSON.stringify({ error: "Missing OPENAI_API_KEY" }), {
-      status: 500,
-      headers: withCors(origin, { "Content-Type": "application/json" }),
-    });
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY
+  if (!OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'Missing OPENAI_API_KEY' })
   }
 
   try {
-    const { question, data, companies } = await req.json();
-    const sample = Array.isArray(data) ? data.slice(0, 200) : [];
+    const { question, data = [], companies = [] } = req.body || {}
+    const sample = Array.isArray(data) ? data.slice(0, 200) : []
 
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: 'gpt-4o-mini',
         temperature: 0.3,
         messages: [
-          { role: "system", content: "Eres analista financiero. Responde claro y en español." },
+          { role: 'system', content: 'Eres analista financiero. Responde claro y en español.' },
           {
-            role: "user",
+            role: 'user',
             content:
               `Pregunta: ${question}\n` +
-              `Sociedades: ${Array.isArray(companies) && companies.length ? companies.join(", ") : "todas"}\n` +
+              `Sociedades: ${companies?.join(', ') || 'todas'}\n` +
               `Muestra: ${JSON.stringify(sample)}`,
           },
         ],
       }),
-    });
+    })
 
     if (!r.ok) {
-      const t = await r.text();
-      return new Response(JSON.stringify({ error: t }), {
-        status: r.status,
-        headers: withCors(origin, { "Content-Type": "application/json" }),
-      });
+      const t = await r.text()
+      // Propaga 401 si OpenAI devolvió 401 (clave inválida)
+      return res.status(r.status === 401 ? 401 : 500).json({ error: t })
     }
 
-    const j = await r.json();
-    const answer = j?.choices?.[0]?.message?.content ?? "Sin respuesta.";
-    return new Response(JSON.stringify({ answer, via: "remote" }), {
-      status: 200,
-      headers: withCors(origin, { "Content-Type": "application/json" }),
-    });
+    const j = await r.json()
+    const answer = j?.choices?.[0]?.message?.content ?? 'Sin respuesta.'
+    return res.json({ answer })
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message ?? "Error" }), {
-      status: 500,
-      headers: withCors(origin, { "Content-Type": "application/json" }),
-    });
+    return res.status(500).json({ error: e?.message ?? 'Error' })
   }
 }

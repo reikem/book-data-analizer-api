@@ -1,13 +1,17 @@
-import { withCors } from "./_cors";
-export const config = { runtime: "edge" };
+import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-export default async function handler(req: Request) {
-  const origin = req.headers.get("origin");
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: withCors(origin) });
-  }
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: withCors(origin, { "Content-Type": "application/json" }),
-  });
+const ALLOWED_ORIGINS = ['https://reikem.github.io', 'http://localhost:5173']
+
+function setCORS(req: VercelRequest, res: VercelResponse) {
+  const origin = req.headers.origin || ''
+  if (ALLOWED_ORIGINS.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin)
+  res.setHeader('Vary', 'Origin')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+}
+
+export default function handler(req: VercelRequest, res: VercelResponse) {
+  setCORS(req, res)
+  if (req.method === 'OPTIONS') return res.status(200).end()
+  return res.status(200).json({ ok: true })
 }
