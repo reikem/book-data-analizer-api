@@ -1,4 +1,3 @@
-// api/_cors.ts
 const ALLOWED_ORIGINS = [
     "https://reikem.github.io",
     "https://reikem.github.io/book-data-analizer",

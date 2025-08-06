@@ -1,5 +1,4 @@
 import { withCors } from "./_cors";
-
 export const config = { runtime: "edge" };
 
 export default async function handler(req: Request) {

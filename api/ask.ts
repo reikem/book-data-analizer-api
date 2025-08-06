@@ -1,6 +1,4 @@
-// api/ask.ts
 import { withCors } from "./_cors";
-
 export const config = { runtime: "edge" };
 
 export default async function handler(req: Request) {
@@ -11,7 +9,14 @@ export default async function handler(req: Request) {
     return new Response(null, { status: 204, headers: withCors(origin) });
   }
 
-  // Solo POST
+  // (Opcional) Tratar GET como ping para evitar 405 en consola
+  if (req.method === "GET") {
+    return new Response(JSON.stringify({ ok: true, hint: "Use POST for questions" }), {
+      status: 200,
+      headers: withCors(origin, { "Content-Type": "application/json" }),
+    });
+  }
+
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
       status: 405,
@@ -33,10 +38,7 @@ export default async function handler(req: Request) {
 
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.3,
